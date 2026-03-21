@@ -89,6 +89,13 @@ h1 { text-align: center; font-size: 24px; margin-bottom: 24px; color: #1a1a1a; }
   font-size: 16px; line-height: 1.8; color: #333; white-space: pre-wrap;
 }
 .card-answer.visible { display: block; }
+.tts-answer-btn {
+  display: none; margin-top: 10px; padding: 8px 16px; font-size: 14px;
+  color: #4A90D9; background: #EBF3FB; border: none; border-radius: 8px;
+  cursor: pointer; font-weight: 500;
+}
+.tts-answer-btn.visible { display: inline-block; }
+.tts-answer-btn.speaking { background: #4A90D9; color: #fff; }
 .answer-btns { display: none; gap: 12px; }
 .answer-btns.visible { display: flex; }
 .btn-wrong, .btn-correct {
@@ -177,6 +184,7 @@ h1 { text-align: center; font-size: 24px; margin-bottom: 24px; color: #1a1a1a; }
       <div class="card-hint" id="cardHint"></div>
       <button class="show-answer-btn" id="showAnswerBtn" onclick="showAnswer()">显示答案</button>
       <div class="card-answer" id="cardAnswer"></div>
+      <button class="tts-answer-btn" id="ttsAnswerBtn" onclick="toggleAnswerTTS()">&#x1f50a; 读答案</button>
     </div>
     <div class="answer-btns" id="answerBtns">
       <button class="btn-wrong" onclick="answer(false)">不会</button>
@@ -304,6 +312,23 @@ function stopTTS() {
   isSpeaking = false;
   const btn = document.getElementById('ttsBtn');
   if (btn) btn.classList.remove('speaking');
+  const aBtn = document.getElementById('ttsAnswerBtn');
+  if (aBtn) aBtn.classList.remove('speaking');
+}
+
+function toggleAnswerTTS() {
+  if (isSpeaking) { stopTTS(); return; }
+  const q = quizQueue[currentIndex];
+  if (!q) return;
+  ttsUtterance = new SpeechSynthesisUtterance(q.answer);
+  ttsUtterance.lang = 'zh-CN';
+  ttsUtterance.rate = 1.25;
+  const aBtn = document.getElementById('ttsAnswerBtn');
+  ttsUtterance.onend = () => { isSpeaking = false; aBtn.classList.remove('speaking'); };
+  ttsUtterance.onerror = () => { isSpeaking = false; aBtn.classList.remove('speaking'); };
+  isSpeaking = true;
+  aBtn.classList.add('speaking');
+  speechSynthesis.speak(ttsUtterance);
 }
 
 function toggleTTS() {
@@ -390,12 +415,14 @@ function renderQuestion() {
     document.getElementById('showAnswerBtn').style.display = '';
     document.getElementById('answerBtns').classList.remove('visible');
     document.getElementById('nextBtn').classList.remove('visible');
+    document.getElementById('ttsAnswerBtn').classList.remove('visible');
   } else {
     // QA mode: show answer directly, show "下一题" button
     document.getElementById('cardAnswer').classList.add('visible');
     document.getElementById('showAnswerBtn').style.display = 'none';
     document.getElementById('answerBtns').classList.remove('visible');
     document.getElementById('nextBtn').classList.add('visible');
+    document.getElementById('ttsAnswerBtn').classList.add('visible');
   }
 
   // Auto-read question aloud
@@ -424,6 +451,7 @@ function showAnswer() {
   document.getElementById('cardAnswer').classList.add('visible');
   document.getElementById('showAnswerBtn').style.display = 'none';
   document.getElementById('answerBtns').classList.add('visible');
+  document.getElementById('ttsAnswerBtn').classList.add('visible');
 }
 
 function answer(correct) {
