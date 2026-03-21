@@ -336,7 +336,7 @@ function toggleAnswerTTS() {
   if (!q) return;
   ttsUtterance = new SpeechSynthesisUtterance(q.answer);
   ttsUtterance.lang = 'zh-CN';
-  ttsUtterance.rate = 1.25;
+  ttsUtterance.rate = 0.9;
   const aBtn = document.getElementById('ttsAnswerBtn');
   ttsUtterance.onend = () => { isSpeaking = false; aBtn.classList.remove('speaking'); };
   ttsUtterance.onerror = () => { isSpeaking = false; aBtn.classList.remove('speaking'); };
@@ -355,7 +355,7 @@ function toggleTTS() {
   const text = q.question;
   ttsUtterance = new SpeechSynthesisUtterance(text);
   ttsUtterance.lang = 'zh-CN';
-  ttsUtterance.rate = 1.25;
+  ttsUtterance.rate = 0.9;
   ttsUtterance.onend = () => {
     isSpeaking = false;
     document.getElementById('ttsBtn').classList.remove('speaking');
@@ -446,7 +446,7 @@ function renderQuestion() {
     const text = q.question;
     ttsUtterance = new SpeechSynthesisUtterance(text);
     ttsUtterance.lang = 'zh-CN';
-    ttsUtterance.rate = 1.25;
+    ttsUtterance.rate = 0.9;
     ttsUtterance.onend = () => {
       isSpeaking = false;
       document.getElementById('ttsBtn').classList.remove('speaking');
@@ -714,6 +714,9 @@ function handleVoiceCommand(text) {
     if (!document.getElementById('cardAnswer').classList.contains('visible')) {
       showAnswer();
     }
+  } else if (text.includes('读一下问题') || text.includes('重复一下') || text.includes('重复问题') || (text.includes('问题') && !text.includes('下一'))) {
+    stopTTS();
+    toggleTTS();
   } else if (text.includes('结束')) {
     endQuiz();
   }
