@@ -683,43 +683,61 @@ function initVoiceCommand() {
   };
 }
 
+// Voice command definitions — order matters (longer/more specific first)
+const VOICE_COMMANDS = [
+  { name: '下一题', pattern: /下一|下易|下已|下移|夏一|虾一/, action: 'next' },
+  { name: '读答案', pattern: /读答|念答|大案|读一下答|看一下答/, action: 'readAnswer' },
+  { name: '不会',   pattern: /不会|不对|不知|补会|不回|不归/, action: 'wrong' },
+  { name: '读问题', pattern: /读问|念题|读题|独立|重复|再说|再读|再念|读一下问/, action: 'readQuestion' },
+  { name: '显示答案', pattern: /显示|翻开|看答|展开/, action: 'showAnswer' },
+  { name: '会了',   pattern: /会了|会的|对了|对的|回了|汇了|会啦/, action: 'correct' },
+  { name: '结束',   pattern: /结束|停止|停了|退出/, action: 'end' },
+  // "答案" and "问题" as single words — check last to avoid false matches
+  { name: '答案',   pattern: /答案/, action: 'readAnswer' },
+  { name: '问题',   pattern: /问题/, action: 'readQuestion' },
+  // Loose match for "会" — only if nothing else matched and text is very short
+  { name: '会',     pattern: /^.{0,3}(会|回|汇|对).{0,3}$/, action: 'correct' },
+];
+
 function handleVoiceCommand(text) {
-  showToast('听到: ' + text);
-  if (text.includes('下一题') || text.includes('下一个')) {
-    if (quizMode === 'qa') {
-      nextQA();
-    } else {
-      // Self mode: if answer is visible, treat as "会" and go next
-      if (document.getElementById('cardAnswer').classList.contains('visible')) {
-        answer(true);
-      } else {
-        showAnswer();
-      }
+  const answerVisible = document.getElementById('cardAnswer').classList.contains('visible');
+
+  for (const cmd of VOICE_COMMANDS) {
+    if (!cmd.pattern.test(text)) continue;
+
+    showToast('听到: ' + text + ' → ' + cmd.name);
+
+    switch (cmd.action) {
+      case 'next':
+        if (quizMode === 'qa') { nextQA(); }
+        else if (answerVisible) { answer(true); }
+        else { showAnswer(); }
+        return;
+      case 'readAnswer':
+        if (!answerVisible) showAnswer();
+        toggleAnswerTTS();
+        return;
+      case 'readQuestion':
+        stopTTS();
+        toggleTTS();
+        return;
+      case 'wrong':
+        if (quizMode === 'self' && answerVisible) answer(false);
+        return;
+      case 'correct':
+        if (quizMode === 'self' && answerVisible) answer(true);
+        return;
+      case 'showAnswer':
+        if (!answerVisible) showAnswer();
+        return;
+      case 'end':
+        endQuiz();
+        return;
     }
-  } else if (text.includes('读答案') || text.includes('答案')) {
-    // Show answer first if hidden
-    if (!document.getElementById('cardAnswer').classList.contains('visible')) {
-      showAnswer();
-    }
-    toggleAnswerTTS();
-  } else if (text.includes('不会')) {
-    if (quizMode === 'self' && document.getElementById('cardAnswer').classList.contains('visible')) {
-      answer(false);
-    }
-  } else if (text.includes('会了') || text === '会') {
-    if (quizMode === 'self' && document.getElementById('cardAnswer').classList.contains('visible')) {
-      answer(true);
-    }
-  } else if (text.includes('显示答案')) {
-    if (!document.getElementById('cardAnswer').classList.contains('visible')) {
-      showAnswer();
-    }
-  } else if (text.includes('读一下问题') || text.includes('重复一下') || text.includes('重复问题') || (text.includes('问题') && !text.includes('下一'))) {
-    stopTTS();
-    toggleTTS();
-  } else if (text.includes('结束')) {
-    endQuiz();
   }
+
+  // No command matched
+  showToast('听到: ' + text + '（未识别）');
 }
 
 function startMic() {
