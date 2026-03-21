@@ -96,6 +96,20 @@ h1 { text-align: center; font-size: 24px; margin-bottom: 24px; color: #1a1a1a; }
 }
 .tts-answer-btn.visible { display: inline-block; }
 .tts-answer-btn.speaking { background: #4A90D9; color: #fff; }
+.mic-btn {
+  position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px;
+  border-radius: 50%; border: none; background: #eee; color: #999;
+  font-size: 24px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: none; align-items: center; justify-content: center; z-index: 100;
+}
+.mic-btn.active { display: flex; }
+.mic-btn.listening { background: #FF3B30; color: #fff; animation: mic-pulse 1s infinite; }
+@keyframes mic-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+.mic-toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 18px; border-radius: 20px;
+  font-size: 14px; z-index: 101; display: none; white-space: nowrap;
+}
 .answer-btns { display: none; gap: 12px; }
 .answer-btns.visible { display: flex; }
 .btn-wrong, .btn-correct {
@@ -636,6 +650,119 @@ function escapeHtml(str) {
 }
 
 loadQuestions();
+
+// === Voice Command (Speech Recognition) ===
+let recognition = null;
+let micActive = false;
+
+function initVoiceCommand() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return; // Not supported
+  recognition = new SR();
+  recognition.lang = 'zh-CN';
+  recognition.continuous = true;
+  recognition.interimResults = false;
+
+  recognition.onresult = (e) => {
+    const last = e.results[e.results.length - 1];
+    if (!last.isFinal) return;
+    const text = last[0].transcript.trim();
+    handleVoiceCommand(text);
+  };
+
+  recognition.onend = () => {
+    // Auto-restart if still on quiz page
+    if (micActive) {
+      try { recognition.start(); } catch(e) {}
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    console.log('Voice error:', e.error);
+  };
+}
+
+function handleVoiceCommand(text) {
+  showToast('听到: ' + text);
+  if (text.includes('下一题') || text.includes('下一个')) {
+    if (quizMode === 'qa') {
+      nextQA();
+    } else {
+      // Self mode: if answer is visible, treat as "会" and go next
+      if (document.getElementById('cardAnswer').classList.contains('visible')) {
+        answer(true);
+      } else {
+        showAnswer();
+      }
+    }
+  } else if (text.includes('读答案') || text.includes('答案')) {
+    // Show answer first if hidden
+    if (!document.getElementById('cardAnswer').classList.contains('visible')) {
+      showAnswer();
+    }
+    toggleAnswerTTS();
+  } else if (text.includes('不会')) {
+    if (quizMode === 'self' && document.getElementById('cardAnswer').classList.contains('visible')) {
+      answer(false);
+    }
+  } else if (text.includes('会了') || text === '会') {
+    if (quizMode === 'self' && document.getElementById('cardAnswer').classList.contains('visible')) {
+      answer(true);
+    }
+  } else if (text.includes('显示答案')) {
+    if (!document.getElementById('cardAnswer').classList.contains('visible')) {
+      showAnswer();
+    }
+  } else if (text.includes('结束')) {
+    endQuiz();
+  }
+}
+
+function startMic() {
+  if (!recognition) initVoiceCommand();
+  if (!recognition) return;
+  micActive = true;
+  document.getElementById('micBtn').classList.add('listening');
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopMic() {
+  micActive = false;
+  if (recognition) try { recognition.stop(); } catch(e) {}
+  document.getElementById('micBtn').classList.remove('listening');
+}
+
+function toggleMic() {
+  if (micActive) stopMic();
+  else startMic();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('micToast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 1500);
+}
+
+// Show/hide mic button based on page
+const origShowPage = showPage;
+showPage = function(id) {
+  origShowPage(id);
+  const micBtn = document.getElementById('micBtn');
+  if (id === 'quiz') {
+    micBtn.classList.add('active');
+    startMic();
+  } else {
+    micBtn.classList.remove('active');
+    stopMic();
+  }
+};
+
+initVoiceCommand();
 </script>
+<button class="mic-btn" id="micBtn" onclick="toggleMic()" title="语音指令">&#x1f3a4;</button>
+<div class="mic-toast" id="micToast"></div>
 </body>
 </html>
