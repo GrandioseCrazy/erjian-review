@@ -26,6 +26,8 @@ h1 { text-align: center; font-size: 24px; margin-bottom: 24px; color: #1a1a1a; }
 .start-btn.mode-self:active { background: #3a7bc8; }
 .start-btn.mode-qa { background: #F5A623; }
 .start-btn.mode-qa:active { background: #d99218; }
+.start-btn.mode-resume { background: #34C759; }
+.start-btn.mode-resume:active { background: #2ba84a; }
 .question-count { text-align: center; color: #888; font-size: 14px; margin-bottom: 32px; }
 
 /* History */
@@ -173,6 +175,7 @@ h1 { text-align: center; font-size: 24px; margin-bottom: 24px; color: #1a1a1a; }
     <h1>二建错题复习</h1>
     <button class="start-btn mode-self" onclick="startQuiz('self')">开始复习</button>
     <button class="start-btn mode-qa" onclick="startQuiz('qa')">问答模式</button>
+    <button class="start-btn mode-resume" id="resumeBtn" onclick="resumeQuiz()" style="display:none">继续上次</button>
     <div class="question-count" id="questionCount"></div>
     <div class="history-title">复习记录</div>
     <div id="historyArea"></div>
@@ -316,6 +319,7 @@ let quizQueue = [];
 let currentIndex = 0;
 let results = []; // { question, correct }
 let quizMode = 'self'; // 'self' or 'qa'
+const ACTIVE_SESSION_KEY = 'activeQuizSession';
 
 // TTS
 let ttsUtterance = null;
@@ -380,7 +384,74 @@ async function loadQuestions() {
     else allQuestions = [];
   }
   document.getElementById('questionCount').textContent = '共 ' + allQuestions.length + ' 题';
+  updateResumeButton();
   renderHistory();
+}
+
+function saveActiveSession() {
+  const payload = {
+    mode: quizMode,
+    queue: quizQueue.map(q => q.id),
+    currentIndex,
+    results: results.map(r => ({ id: r.question.id, correct: r.correct }))
+  };
+  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(payload));
+  updateResumeButton();
+}
+
+function clearActiveSession() {
+  localStorage.removeItem(ACTIVE_SESSION_KEY);
+  updateResumeButton();
+}
+
+function getActiveSession() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (!session || !Array.isArray(session.queue) || session.queue.length === 0) return null;
+    if (typeof session.currentIndex !== 'number' || session.currentIndex < 0) return null;
+    return session;
+  } catch (e) {
+    return null;
+  }
+}
+
+function updateResumeButton() {
+  const btn = document.getElementById('resumeBtn');
+  if (!btn) return;
+  btn.style.display = getActiveSession() ? 'block' : 'none';
+}
+
+function resumeQuiz() {
+  const session = getActiveSession();
+  if (!session || allQuestions.length === 0) return;
+
+  const questionMap = new Map(allQuestions.map(q => [q.id, q]));
+  const restoredQueue = session.queue.map(id => questionMap.get(id)).filter(Boolean);
+  if (restoredQueue.length === 0) {
+    clearActiveSession();
+    return;
+  }
+
+  quizMode = session.mode === 'qa' ? 'qa' : 'self';
+  quizQueue = restoredQueue;
+  currentIndex = Math.min(session.currentIndex, quizQueue.length);
+  results = Array.isArray(session.results)
+    ? session.results.map(r => {
+        const question = questionMap.get(r.id);
+        return question ? { question, correct: !!r.correct } : null;
+      }).filter(Boolean)
+    : [];
+
+  if (currentIndex >= quizQueue.length) {
+    if (quizMode === 'qa') finishQuizQA();
+    else finishQuiz();
+    return;
+  }
+
+  showPage('quiz');
+  renderQuestion();
 }
 
 function shuffle(arr) {
@@ -406,6 +477,7 @@ function startQuiz(mode) {
   quizQueue = shuffle(allQuestions);
   currentIndex = 0;
   results = [];
+  saveActiveSession();
   showPage('quiz');
   renderQuestion();
 }
@@ -466,12 +538,14 @@ function showAnswer() {
   document.getElementById('showAnswerBtn').style.display = 'none';
   document.getElementById('answerBtns').classList.add('visible');
   document.getElementById('ttsAnswerBtn').classList.add('visible');
+  saveActiveSession();
 }
 
 function answer(correct) {
   stopTTS();
   results.push({ question: quizQueue[currentIndex], correct });
   currentIndex++;
+  if (currentIndex < quizQueue.length) saveActiveSession();
   if (currentIndex < quizQueue.length) renderQuestion();
   else finishQuiz();
 }
@@ -481,6 +555,7 @@ function nextQA() {
   stopTTS();
   // In QA mode, we don't track correct/wrong
   currentIndex++;
+  if (currentIndex < quizQueue.length) saveActiveSession();
   if (currentIndex < quizQueue.length) renderQuestion();
   else finishQuizQA();
 }
@@ -493,6 +568,7 @@ function endQuiz() {
 }
 
 function finishQuizQA() {
+  clearActiveSession();
   // QA mode: save a simple record
   const total = currentIndex;
   const history = JSON.parse(localStorage.getItem('reviewHistory') || '[]');
@@ -509,6 +585,7 @@ function finishQuizQA() {
 }
 
 function finishQuiz() {
+  clearActiveSession();
   const total = results.length;
   const correct = results.filter(r => r.correct).length;
   const wrong = total - correct;
